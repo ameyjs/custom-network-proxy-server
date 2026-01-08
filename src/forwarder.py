@@ -36,13 +36,6 @@ def forward_data(source_sock, destination_sock, tracker, is_sending, buffer_size
     """
     Forward data from source socket to destination socket with byte tracking.
     Used as a thread target for bidirectional tunneling.
-
-    Args:
-        source_sock: Socket to read data from
-        destination_sock: Socket to write data to
-        tracker: DataTracker instance for byte counting
-        is_sending: True if sending to server, False if receiving from server
-        buffer_size: Size of read buffer
     """
     try:
         while True:
@@ -64,21 +57,6 @@ def tunnel(client_sock, server_sock, buffer_size=4096):
     """
     Create bidirectional tunnel between client and server.
     Used for HTTPS CONNECT tunneling.
-
-    Args:
-        client_sock: Client socket
-        server_sock: Destination server socket
-        buffer_size: Size of receive buffer
-
-    Returns:
-        tuple: (bytes_sent, bytes_received)
-
-    Implementation:
-        - Creates two threads for full-duplex communication
-        - Thread 1: Forwards client → server
-        - Thread 2: Forwards server → client
-        - Waits for both threads to complete
-        - Tracks bytes transferred in both directions
     """
     tracker = DataTracker()
 
@@ -110,25 +88,6 @@ def tunnel(client_sock, server_sock, buffer_size=4096):
 def forward_http(parsed, client_sock, config):
     """
     Forward HTTP request to destination server and return response to client.
-
-    Implements proper Content-Length handling as specified in project requirements.
-
-    Args:
-        parsed: Parsed request dictionary with host, port, headers, and raw request
-        client_sock: Client socket
-        config: ProxyConfig instance
-
-    Returns:
-        tuple: (response_status, bytes_sent, bytes_received)
-
-    Flow:
-        1. Connect to destination server
-        2. Send request headers to server
-        3. If Content-Length present, receive and forward request body
-        4. Receive response from server
-        5. Forward response to client
-        6. Track all bytes transferred
-        7. Close server connection
     """
     server_sock = None
     bytes_sent = 0
@@ -170,10 +129,20 @@ def forward_http(parsed, client_sock, config):
             bytes_received += len(response)
 
     except socket.timeout:
-        response_status = "TIMEOUT"
+        # --- FIX: SMART TIMEOUT HANDLING ---
+        if bytes_received > 0:
+            # We received data, so this is likely just the connection staying open.
+            # Treat this as a success (200 OK), not an error.
+            if not response_status:
+                response_status = "200"
+        else:
+            # We received NOTHING. This is a real timeout error.
+            response_status = "TIMEOUT"
+            
     except ConnectionRefusedError:
         response_status = "REFUSED"
-    except Exception:
+    except Exception as e:
+        print(f"!!! DEBUG ERROR: {e} !!!")  # <--- This will tell us the secret
         response_status = "ERROR"
     finally:
         # Close server connection

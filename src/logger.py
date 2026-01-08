@@ -82,6 +82,8 @@ def log_request(client_addr, host, port, method, status, response_status=None,
 
     log_entry = " ".join(log_parts) + "\n"
 
+    print(log_entry.strip())
+    
     with log_lock:
         # Check if rotation is needed
         if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > MAX_LOG_SIZE:

@@ -158,38 +158,44 @@ def handle_connect(client_sock, client_addr, parsed, config):
 def handle_http(client_sock, client_addr, parsed, config):
     """
     Handle regular HTTP request.
-    Forwards request to destination and returns response.
-
-    Args:
-        client_sock: Client socket
-        client_addr: Client address tuple
-        parsed: Parsed request dictionary
-        config: ProxyConfig instance
     """
-    try:
-        host = parsed["host"]
-        port = parsed["port"]
-        method = parsed["method"]
+    host = parsed["host"]
+    port = parsed["port"]
+    method = parsed["method"]
+    
+    # Initialize variables to avoid "UnboundLocalError"
+    response_status = "ERROR" 
+    bytes_sent = 0
+    bytes_received = 0
+    success = False
 
-        # Forward request and response, tracking bytes
+    try:
+        # 1. Do the heavy lifting (Forwarding)
         response_status, bytes_sent, bytes_received = forward_http(
             parsed, client_sock, config
         )
+        success = True
 
-        # Update global metrics
-        add_bytes_sent(bytes_sent)
-        add_bytes_received(bytes_received)
+    except Exception as e:
+        print(f"DEBUG: Forwarding failed: {e}")
+        response_status = "ERROR"
 
-        # Log the request with full metrics
+    # 2. Update Metrics (Thread-safe)
+    try:
+        if bytes_sent > 0: add_bytes_sent(bytes_sent)
+        if bytes_received > 0: add_bytes_received(bytes_received)
+    except:
+        pass
+
+    # 3. Log the result (Outside the main try block)
+    if success:
         log_request(client_addr, host, port, method, "ALLOWED",
-                   response_status=response_status,
-                   bytes_sent=bytes_sent,
-                   bytes_received=bytes_received)
-
-    except Exception:
+                    response_status=response_status,
+                    bytes_sent=bytes_sent,
+                    bytes_received=bytes_received)
+    else:
         log_request(client_addr, host, port, method, "ERROR")
-
-
+        
 def send_error_response(client_sock, status_code, status_message, body_message, config):
     """
     Send an HTTP error response to the client.
